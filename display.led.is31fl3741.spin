@@ -51,9 +51,9 @@ VAR
 
 OBJ
 
-    i2c : "com.i2c"                             ' PASM I2C engine (up to ~800kHz)
-    core: "core.con.is31fl3741"                 ' hw-specific low-level const's
-    time: "time"                                ' basic timing functions
+    i2c:    "com.i2c"                           ' I2C engine
+    core:   "core.con.is31fl3741"               ' hw-specific constants
+    time:   "time"                              ' basic timing functions
 
 
 PUB null()
@@ -61,19 +61,29 @@ PUB null()
 
 
 PUB start(): status
-' Start using "standard" Propeller I2C pins and 100kHz
+' Start using default I/O settings
     return startx(SCL, SDA, I2C_FREQ, I2C_ADDR, WIDTH, HEIGHT, @_framebuffer)
 
 
 PUB startx(SCL_PIN, SDA_PIN, I2C_HZ, ADDR_BITS, DISP_WID, DISP_HT, ptr_fb): status
-' Start using custom IO pins and I2C bus frequency
+' Start the driver with custom I/O settings
+'   SCL_PIN:    I2C clock, 0..31
+'   SDA_PIN:    I2C data, 0..31
+'   I2C_HZ:     I2C clock speed (max official specification is 1_000_000 but is unenforced)
+'   ADDR_BITS:  I2C alternate address bit, 0..3
+'   DISP_WID:   display width
+'   DISP_HT:    display height
+'   Returns:
+'       cog ID+1 of I2C engine on success (= calling cog ID+1, if the bytecode I2C engine is used)
+'       0 on failure
     if ( lookdown(SCL_PIN: 0..31) and lookdown(SDA_PIN: 0..31) )
         if ( status := i2c.init(SCL_PIN, SDA_PIN, I2C_HZ) )
             time.usleep(core.T_POR)             ' wait for device startup
             _addr_bits := ADDR_BITS << 1
             set_dims(DISP_WID, DISP_HT)
             set_address(ptr_fb)
-            if ( dev_id() == core.DEVID_RESP )  ' validate device
+            if ( dev_id() == core.DEVID_RESP | _addr_bits )
+                ' verify communication with the chip
                 return
     ' if this point is reached, something above failed
     ' Re-check I/O pin assignments, bus speed, connections, power
@@ -146,13 +156,13 @@ PUB plot(x, y, c) | offs, ptr
     if ( (x & 1) or (x == 12) )                 ' remap subpixel/color byte order for these columns
 {#ifdef GFX_DIRECT
     ' direct to display
-        setled(0, offs+0, c.byte[1])
-        setled(0, offs+1, c.byte[2])
-        setled(0, offs+2, c.byte[0])
+        set_led(0, offs+0, c.byte[1])
+        set_led(0, offs+1, c.byte[2])
+        set_led(0, offs+2, c.byte[0])
     else
-        setled(0, offs+0, c.byte[0])
-        setled(0, offs+1, c.byte[1])
-        setled(0, offs+2, c.byte[2])
+        set_led(0, offs+0, c.byte[0])
+        set_led(0, offs+1, c.byte[1])
+        set_led(0, offs+2, c.byte[2])
 #else}
     ' buffered
         byte[ptr+0] := c.byte[1]
@@ -180,9 +190,9 @@ PUB point(x, y): c | offs
         offs := (x + (80 + y * 3)) * 3
 
     if (x & 1) or (x == 12)
-'        setled(0, offs+2, c.byte[2])
-'        setled(0, offs, c.byte[1])
-'        setled(0, offs+1, c.byte[0])
+'        set_led(0, offs+2, c.byte[2])
+'        set_led(0, offs, c.byte[1])
+'        set_led(0, offs+1, c.byte[0])
 '       c.byte[2] := byte[offs+2]
 '       c.byte[1] := byte[offs]
 '       c.byte[0] := byte[offs+1]
@@ -213,7 +223,7 @@ PUB show() | byte buff[180+1]                   ' display plus one byte for the 
 #ifndef GFX_DIRECT
     select_page(0)                              ' draw to page 0
     buff[0] := $00                              ' set matrix starting address to draw to
-    bytemove(@buff+1, _ptr_drawbuffer, 180)     ' copy half (roughly) of the fb locally
+    bytemove(@buff+1, _ptr_drawbuffer, 180)     ' copy (approximately) half of the fb locally
     i2c.start()
     i2c.write(SLAVE_WR | _addr_bits)
     i2c.wrblock_lsbf(@buff, 180+1)              ' write the fb to the matrix
@@ -245,14 +255,14 @@ PRI memfill(xs, ys, val, count) | offset, i
 #endif
 
 
-PRI readreg(reg_nr, nr_bytes, ptr_buff): status | cmd_pkt
+PRI readreg(reg_nr, nr_bytes, ptr_buff): s | cmd_pkt
 ' Read reg_nr from device into ptr_buff
     cmd_pkt.byte[0] := (SLAVE_WR | _addr_bits)
     cmd_pkt.byte[1] := reg_nr
 
     i2c.start()
-    status := i2c.wrblock_lsbf(@cmd_pkt, 2)
-    if (status == i2c.NAK)
+    s := i2c.wrblock_lsbf(@cmd_pkt, 2)
+    if ( s == i2c.NAK )
         i2c.stop()
         return -1
     i2c.stop()
@@ -265,18 +275,21 @@ PRI readreg(reg_nr, nr_bytes, ptr_buff): status | cmd_pkt
 PRI select_page(pg)
 ' Set active internal memory page
 '   Valid values: 0..4
-    if lookdown(pg: 0..4)
-        if (pg == _page)                        ' ignore if already on selected
+    if ( (pg => 0) and (pg =< 4) )
+        if ( pg == _page )                      ' ignore if already on selected
             return                              '   page
         _page := pg
         unlock()
         writereg(core.COMMAND, pg)
 
 
-PRI setled(pg, led, val)
-' Set LED
-    if lookdown(led: 0..350)
-        if led < 180
+PRI set_led(pg, led, val)
+' Set LED color
+'   pg:     page number
+'   led:    led number
+'   val:    value/color to set LED (u8)
+    if ( lookdown(led: 0..350) )
+        if ( led < 180 )
             select_page(pg)
         else
             led -= 180

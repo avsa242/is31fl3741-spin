@@ -26,7 +26,6 @@ pub main() | i, c, x, y
 
     setup()
     led.brightness(64)
-'    led.powered(true)
 
     repeat i from 0 to 350
         led.set_led_current_limit(i, 16)
