@@ -1,10 +1,10 @@
 {
 ----------------------------------------------------------------------------------------------------
-    Filename:       display.led.is31fl3741.i2c.spin
+    Filename:       display.led.is31fl3741.spin
     Description:    Driver for the IS31FL3741 RGB LED matrix driver IC
     Author:         Jesse Burt
     Started:        Jan 9, 2022
-    Updated:        Nov 9, 2024
+    Updated:        Nov 10, 2024
     Copyright (c) 2024 - See end of file for terms of use.
 ----------------------------------------------------------------------------------------------------
 }
@@ -33,7 +33,8 @@ CON
     BPP         = 24                            ' bits per pixel/color depth of the display
     BYTESPERPX  = 1 #> (BPP/8)                  ' limit to minimum of 1
     BPPDIV      = BYTESPERPX #> (8 / BPP)       ' limit to range BYTESPERPX .. (8/BPP)
-    BUFF_SZ     = (WIDTH * HEIGHT) / BPPDIV
+    BUFF_SZ     = (WIDTH * HEIGHT)              ' buffer size in display native word size
+    BUFF_SZ_BYTE= BUFF_SZ / BPPDIV              ' same, but in bytes
     MAX_COLOR   = (1 << BPP)-1
 
 
