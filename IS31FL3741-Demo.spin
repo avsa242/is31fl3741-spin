@@ -1,7 +1,7 @@
 {
 ----------------------------------------------------------------------------------------------------
-    Filename:       core.con.is31fl3741.spin
-    Description:    IS31FL3741-specific constants
+    Filename:       IS31FL3741-Demo.spin
+    Description:    Demo of the IS31FL3741 driver
     Author:         Jesse Burt
     Started:        Jan 9, 2022
     Updated:        Nov 9, 2024
@@ -11,42 +11,52 @@
 
 CON
 
-' I2C Configuration
-    I2C_MAX_FREQ    = 1_000_000                 ' device max I2C bus freq
-    SLAVE_ADDR      = $30 << 1                  ' 7-bit format slave address
-    T_POR           = 1000                      ' startup time (usecs)
-
-    DEVID_RESP      = $60                       ' device ID expected response
-
-' Register definitions
-    CONFIG          = $00
-    CONFIG_MASK     = $FF
-        SWS         = 4
-        LGC         = 3
-        OSDE        = 1
-        SSD         = 0
-        SWS_BITS    = %1111
-        OSDE_BITS   = %11
-        SWS_MASK    = (SWS_BITS << SWS) ^ CONFIG_MASK
-        LGC_MASK    = (1 << LGC) ^ CONFIG_MASK
-        OSDE_MASK   = (OSDE_BITS << OSDE) ^ CONFIG_MASK
-        SSD_MASK    = 1 ^ CONFIG_MASK
-        PWRON       = (1 << SSD)
-        LGCLVL_HI   = (1 << LGC)
-
-    GCC             = $01
-
-    RESET           = $3F
-        DO_RESET    = $AE
-
-    ID              = $FC
-    COMMAND         = $FD
-    LOCK_STATE      = $FE
-        UNLOCK      = $C5
+    _clkmode = xtal1+pll16x
+    _xinfreq = 5_000_000
 
 
-PUB null()
-' This is not a top-level object
+OBJ
+
+    ser:    "com.serial.terminal.ansi" | SER_BAUD=115_200
+    led:    "display.led.is31fl3741.spin" | SCL=28, SDA=29, I2C_FREQ=400_000, I2C_ADDR=0
+    time:   "time"
+
+
+pub main() | i, c, x, y
+
+    setup()
+    led.brightness(64)
+'    led.powered(true)
+
+    repeat i from 0 to 350
+        led.set_led_current_limit(i, 16)
+
+    repeat
+        repeat i from 0 to 7
+            c := lookupz(i: $ff_00_00, $00_ff_00, $00_00_ff, $00_ff_ff, $ff_00_ff, $ff_ff_00, ...
+                            $ff_ff_ff, $00_00_00)
+            led.clear()
+            repeat y from 0 to 8
+                repeat x from 0 to 12
+                    led.plot(x, y, c)
+            led.show()
+            time.msleep(250)
+
+
+PUB setup()
+
+    ser.start()
+    time.msleep(30)
+    ser.clear()
+
+    if ( led.start() )
+        ser.strln(@"IS31FL3741 driver started")
+    else
+        ser.strln(@"IS31FL3741 driver failed to start - halting")
+        repeat
+
+    led.reset()
+    led.powered(true)
 
 
 DAT
