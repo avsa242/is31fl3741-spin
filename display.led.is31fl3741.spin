@@ -4,12 +4,12 @@
     Description:    Driver for the IS31FL3741 RGB LED matrix driver IC
     Author:         Jesse Burt
     Started:        Jan 9, 2022
-    Updated:        Nov 10, 2024
+    Updated:        Nov 11, 2024
     Copyright (c) 2024 - See end of file for terms of use.
 ----------------------------------------------------------------------------------------------------
 }
 
-#define MEMMV_NATIVE bytemove
+#define MEMMV_NATIVE longmove
 #include "graphics.common.spinh"
 
 CON
