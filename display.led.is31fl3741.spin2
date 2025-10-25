@@ -4,7 +4,7 @@
     Description:    Driver for the IS31FL3741 RGB LED matrix driver IC
     Author:         Jesse Burt
     Started:        Nov 10, 2024
-    Updated:        Feb 7, 2025
+    Updated:        Oct 25, 2025
     Copyright (c) 2025 - See end of file for terms of use.
 ----------------------------------------------------------------------------------------------------
 }
@@ -107,12 +107,14 @@ PUB brightness(lvl)
     writereg(core.GCC, lvl)
 
 
-PUB clear()
+PUB clear() | x, y
 ' Clear the display to the background color
 #ifdef GFX_DIRECT
     box(0, 0, _disp_xmax, _disp_ymax, _bgcolor, true)
 #else
-    bytefill(_ptr_drawbuffer, _bgcolor, _buff_sz)
+    repeat y from 0 to _disp_ymax
+        repeat x from 0 to _disp_xmax
+            plot(x, y, _bgcolor)
 #endif
 
 
