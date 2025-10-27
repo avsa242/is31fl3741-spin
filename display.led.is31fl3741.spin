@@ -4,7 +4,7 @@
     Description:    Driver for the IS31FL3741 RGB LED matrix driver IC
     Author:         Jesse Burt
     Started:        Jan 9, 2022
-    Updated:        Oct 25, 2025
+    Updated:        Oct 27, 2025
     Copyright (c) 2025 - See end of file for terms of use.
 ----------------------------------------------------------------------------------------------------
 }
@@ -29,7 +29,7 @@ CON
     BPP         = 24                            ' bits per pixel/color depth of the display
     BYTESPERPX  = 1 #> (BPP/8)                  ' limit to minimum of 1
     BPPDIV      = BYTESPERPX #> (8 / BPP)       ' limit to range BYTESPERPX .. (8/BPP)
-    BUFF_SZ     = (WIDTH * HEIGHT) / BPPDIV
+    BUFF_SZ     = (WIDTH * HEIGHT)
     MAX_COLOR   = (1 << BPP)-1
     XMAX        = WIDTH-1
     YMAX        = HEIGHT-1
@@ -65,7 +65,7 @@ PUB start(): status
     return startx(SCL, SDA, I2C_FREQ, I2C_ADDR, WIDTH, HEIGHT, @_framebuffer)
 
 
-PUB startx(SCL_PIN, SDA_PIN, I2C_HZ, ADDR_BITS, DISP_WID, DISP_HT, ptr_fb): status
+PUB startx(SCL_PIN, SDA_PIN, I2C_HZ, ADDR_BITS, DISP_WID, DISP_HT, ptr_fb=0): status
 ' Start the driver with custom I/O settings
 '   SCL_PIN:    I2C clock, 0..31
 '   SDA_PIN:    I2C data, 0..31
@@ -73,6 +73,7 @@ PUB startx(SCL_PIN, SDA_PIN, I2C_HZ, ADDR_BITS, DISP_WID, DISP_HT, ptr_fb): stat
 '   ADDR_BITS:  I2C alternate address bit, 0..3
 '   DISP_WID:   display width
 '   DISP_HT:    display height
+'   ptr_fb:     pointer to display framebuffer (default: internal framebuffer)
 '   Returns:
 '       cog ID+1 of I2C engine on success (= calling cog ID+1, if the bytecode I2C engine is used)
 '       0 on failure
@@ -123,21 +124,6 @@ PUB dev_id(): id
 ' Read device identification
     id := 0
     readreg(core.ID, 1, @id)
-
-
-PUB set_led_current_limit(led_nr, ilim): a | i
-' Set current limit for individual led led_nr
-'   Valid values:
-'       led_nr: 0..350
-'       ilim: 0..255
-    if ( lookdown(led_nr: 0..350) )
-        if ( led_nr < 180 )
-            select_page(2)
-        else
-            led_nr -= 180
-            select_page(3)
-        repeat i from 0 to 2
-            a := writereg(led_nr+i, ilim)
 
 
 PUB plot(x, y, c) | offs, ptr
@@ -211,6 +197,31 @@ PUB powered(state): c
     writereg(core.CONFIG, core.PWRON)
 
 
+pub putchar_adafruit_qt(ch) | p, c, b, fgcmx, fgrmx
+' Write one character to the display (Adafruit P/N 5201 low-level method)
+'   NOTE: While this method _can_ be used directly, it _should_ be pointed to by the
+'       set_putchar() method in the bitmap graphics library (#included by this driver).
+'       e.g.:
+'           display.set_putchar(@putchar_adafruit_qt)
+    p := _font_addr + (ch*_fnt_width)           ' point to char in font table
+    fgcmx := _fnt_width-1                       ' font glyph max col, row
+    fgrmx := _fnt_height-1
+    repeat c from 0 to fgcmx
+        repeat b from 0 to fgrmx
+            if ( byte[p][c] & (1 << b) )        ' draw pixel if bit is set
+                plot(_charpx_x+c, _charpx_y+b, _fgcolor)
+            else
+                if ( _char_attrs & DRAWBG )
+                    plot(_charpx_x+c, _charpx_y+b, _bgcolor)
+
+    _charpx_x += _charcell_w                    ' wrap around when reaching the righmost column
+    if ( _charpx_x > _charpx_xmax )
+        _charpx_x := 0
+        _charpx_y += _charcell_h
+    if ( _charpx_y > _charpx_ymax )             '   and the bottom-most row
+        _charpx_y := 0
+
+
 PUB reset(): s
 ' Perform soft-reset
 '   Returns:
@@ -218,6 +229,21 @@ PUB reset(): s
 '       -1: device didn't acknowledge
     select_page(4)
     return writereg(core.RESET, core.DO_RESET)
+
+
+PUB set_led_current_limit(led_nr, ilim): a | i
+' Set current limit for individual led led_nr
+'   Valid values:
+'       led_nr: 0..350
+'       ilim: 0..255
+    if ( lookdown(led_nr: 0..350) )
+        if ( led_nr < 180 )
+            select_page(2)
+        else
+            led_nr -= 180
+            select_page(3)
+        repeat i from 0 to 2
+            a := writereg(led_nr+i, ilim)
 
 
 PUB show() | byte buff[180+1]                   ' display plus one byte for the start address
