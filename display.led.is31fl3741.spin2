@@ -214,11 +214,12 @@ pub putchar_adafruit_qt(ch) | p, c, b, fgcmx, fgrmx
                     plot(_charpx_x+c, _charpx_y+b, _bgcolor)
 
     _charpx_x += _charcell_w                    ' wrap around when reaching the righmost column
-    if ( _charpx_x > _charpx_xmax )
-        _charpx_x := 0
-        _charpx_y += _charcell_h
-    if ( _charpx_y > _charpx_ymax )             '   and the bottom-most row
-        _charpx_y := 0
+    if ( _char_attrs & TEXT_WRAP )
+        if ( _charpx_x > _charpx_xmax )
+            _charpx_x := 0
+            _charpx_y += _charcell_h
+        if ( _charpx_y > _charpx_ymax )             '   and the bottom-most row
+            _charpx_y := 0
 
 
 PUB reset(): s
